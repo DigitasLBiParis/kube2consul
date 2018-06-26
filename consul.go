@@ -100,9 +100,9 @@ func (k2c *kube2consul) removeDeletedEndpoints(serviceName string, endpoints []E
 			}
 			_, err := k2c.consulCatalog.Deregister(dereg, nil)
 			if err != nil {
-				return fmt.Errorf("Error deregistrating service {node: %s, service: %s, address: %s}: %v", service.Node, service.ServiceName, service.Address, err)
+				return fmt.Errorf("Error deregistrating service {node: %s, service: %s, address: %s, port: %d}: %v", service.Node, service.ServiceName, service.Address, service.ServicePort, err)
 			}
-			glog.Infof("Deregister service {node: %s, service: %s, address: %s}", service.Node, service.ServiceName, service.Address)
+			glog.Infof("Deregister service {node: %s, service: %s, address: %s, port: %s}", service.Node, service.ServiceName, service.Address, service.ServicePort)
 			updatedNodes[service.Node] = struct{}{}
 		}
 	}

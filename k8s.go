@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
@@ -18,11 +17,6 @@ import (
 var (
 	k8sRestClient rest.Interface
 )
-
-type TimestampedEndpoint struct {
-	Endpoint  *v1.Endpoints
-	Timestamp time.Time
-}
 
 func newKubeClient(apiserver string, kubeconfig string) (kubeClient kubernetes.Interface, err error) {
 	if kubeconfig == "" {
@@ -82,7 +76,7 @@ func createEndpointsListWatcher(kubeClient kubernetes.Interface) *kcache.ListWat
 func (k2c *kube2consul) handleEndpointUpdate(obj interface{}) {
 	if e, ok := obj.(*v1.Endpoints); ok {
 		if !stringInSlice(e.Namespace, k2c.excludedNamespaces) {
-			k2c.ednpointsCache.Store(e.Name, TimestampedEndpoint{e, time.Now()})
+			k2c.ednpointsChan <- e
 		}
 	}
 }

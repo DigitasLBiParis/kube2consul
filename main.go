@@ -9,8 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/sync/syncmap"
-
 	"github.com/coreos/pkg/flagutil"
 	health "github.com/docker/go-healthcheck"
 	"github.com/golang/glog"
@@ -32,7 +30,7 @@ type arrayFlags []string
 type kube2consul struct {
 	consulCatalog      *consulapi.Catalog
 	endpointsStore     kcache.Store
-	ednpointsCache     syncmap.Map
+	ednpointsChan      chan *v1.Endpoints
 	excludedNamespaces []string
 }
 
@@ -67,7 +65,7 @@ func init() {
 }
 
 func (i *arrayFlags) String() string {
-	return "my string representation"
+	return "string array representation"
 }
 
 func (i *arrayFlags) Set(value string) error {
@@ -133,27 +131,13 @@ func kubernetesCheck() error {
 }
 
 func updateJob(k2c *kube2consul) {
-	lastIterations := make(map[string]time.Time)
 	for {
-		k2c.ednpointsCache.Range(func(key, value interface{}) bool {
-			// cast value to correct format
-			timestampedEndpoint := value.(TimestampedEndpoint)
-			name := key.(string)
-
-			if lastIteration, ok := lastIterations[name]; ok && lastIteration.After(timestampedEndpoint.Timestamp) {
-				return true
-			}
-
-			if err := k2c.updateEndpoints(timestampedEndpoint.Endpoint); err != nil {
+		select {
+		case endpoint := <-k2c.ednpointsChan:
+			if err := k2c.updateEndpoints(endpoint); err != nil {
 				glog.Errorf("Error handling update event: %v", err)
-				return true
 			}
-
-			lastIterations[name] = time.Now()
-
-			return true
-		})
-		time.Sleep(100 * time.Millisecond)
+		}
 	}
 }
 
@@ -215,10 +199,10 @@ func main() {
 	}
 
 	k2c := kube2consul{
-		consulCatalog: consulClient.Catalog(),
+		consulCatalog:      consulClient.Catalog(),
+		excludedNamespaces: opts.excludedNamespaces,
+		ednpointsChan:      make(chan *v1.Endpoints),
 	}
-
-	k2c.excludedNamespaces = opts.excludedNamespaces
 
 	k2c.endpointsStore = k2c.watchEndpoints(kubeClient)
 
