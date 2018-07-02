@@ -108,3 +108,14 @@ func initPerServiceEndpointsFromService(service *v1.Service, perServiceEndpoints
 		perServiceEndpoints[service.Name] = []Endpoint{}
 	}
 }
+
+func getStringKeysFromMap(mymap map[string][]Endpoint) []string {
+	keys := make([]string, len(mymap))
+
+	i := 0
+	for k := range mymap {
+		keys[i] = k
+		i++
+	}
+	return keys
+}

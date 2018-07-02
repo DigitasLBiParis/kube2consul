@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -163,13 +162,9 @@ func initJobFunctions(k2c kube2consul) map[string]concurrent.JobFunc {
 
 	actionJobs[DELETE.value()] = func(id int, value interface{}) {
 		service := value.(*v1.Service)
-		var servicesToDelete []string
-		for k, v := range service.Annotations {
-			if strings.HasPrefix(k, "SERVICE_") && strings.HasSuffix(k, "_NAME") {
-				servicesToDelete = append(servicesToDelete, v)
-			}
-		}
-		k2c.removeDeletedServices(servicesToDelete)
+		perServiceEndpoints := make(map[string][]Endpoint)
+		initPerServiceEndpointsFromService(service, perServiceEndpoints)
+		k2c.removeDeletedServices(getStringKeysFromMap(perServiceEndpoints))
 	}
 
 	actionJobs[REMOVE_DNS_GARBAGE.value()] = func(id int, value interface{}) {

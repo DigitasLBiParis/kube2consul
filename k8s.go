@@ -75,12 +75,13 @@ func createListWatcher(kubeClient kubernetes.Interface, resourceType string) *kc
 }
 
 func (k2c *kube2consul) handleUpdate(resourceType string, actionType ActionType, obj interface{}) {
+	var action concurrent.Action
 	switch resourceType {
 	case "endpoints":
 		{
 			if e, ok := obj.(*v1.Endpoints); ok {
 				if !stringInSlice(e.Namespace, ExcludedNamespaces) {
-					jobQueue <- concurrent.Action{Name: actionType.value(), Data: e}
+					action = concurrent.Action{Name: actionType.value(), Data: e}
 				}
 			}
 		}
@@ -88,11 +89,12 @@ func (k2c *kube2consul) handleUpdate(resourceType string, actionType ActionType,
 		{
 			if s, ok := obj.(*v1.Service); ok {
 				if !stringInSlice(s.Namespace, ExcludedNamespaces) {
-					jobQueue <- concurrent.Action{Name: actionType.value(), Data: s}
+					action = concurrent.Action{Name: actionType.value(), Data: s}
 				}
 			}
 		}
 	}
+	jobQueue <- action
 }
 
 func cleanGarbage() {
