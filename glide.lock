@@ -1,5 +1,5 @@
 hash: 2722e494c37976b826ebf5c3eb1a783f3ea1c0ce07ac109d0e19ba3a9360079b
-updated: 2018-06-25T17:36:42.850698251+02:00
+updated: 2018-07-02T13:07:58.103249065+02:00
 imports:
 - name: github.com/armon/go-metrics
   version: 783273d703149aaeb9897cf58613d5af48861c25
@@ -19,6 +19,8 @@ imports:
   - uuid
 - name: github.com/docker/go-healthcheck
   version: a4f20681d8a1929b947920b5dfe2d16809d815ca
+- name: github.com/echaouchna/go-threadpool
+  version: 2be761b16a2e4759203423fc6a30107c48ffa98a
 - name: github.com/ghodss/yaml
   version: 73d445a93680fa1a78ae23a5839bad48f32ba1ee
 - name: github.com/gogo/protobuf
@@ -90,10 +92,6 @@ imports:
   - http2/hpack
   - idna
   - lex/httplex
-- name: golang.org/x/sync
-  version: 1d60e4601c6fd243af51cc01ddf169918a5407ca
-  subpackages:
-  - syncmap
 - name: golang.org/x/sys
   version: 95c6576299259db960f6c5b9b69ea52422860fce
   subpackages:

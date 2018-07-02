@@ -102,7 +102,7 @@ func (k2c *kube2consul) removeDeletedEndpoints(serviceName string, endpoints []E
 			if err != nil {
 				return fmt.Errorf("Error deregistrating service {node: %s, service: %s, address: %s, port: %d}: %v", service.Node, service.ServiceName, service.Address, service.ServicePort, err)
 			}
-			glog.Infof("Deregister service {node: %s, service: %s, address: %s, port: %s}", service.Node, service.ServiceName, service.Address, service.ServicePort)
+			glog.Infof("Deregister service {node: %s, service: %s, address: %s, port: %d}", service.Node, service.ServiceName, service.Address, service.ServicePort)
 			updatedNodes[service.Node] = struct{}{}
 		}
 	}
@@ -122,6 +122,13 @@ func (k2c *kube2consul) removeDeletedEndpoints(serviceName string, endpoints []E
 			}
 			glog.Infof("Deregister empty node %s", nodeName)
 		}
+	}
+	return nil
+}
+
+func (k2c *kube2consul) removeDeletedServices(serviceNames []string) error {
+	for _, serviceName := range serviceNames {
+		k2c.removeDeletedEndpoints(serviceName, []Endpoint{})
 	}
 	return nil
 }

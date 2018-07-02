@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -94,4 +95,16 @@ func stringInSlice(a string, list []string) bool {
 		}
 	}
 	return false
+}
+
+func initPerServiceEndpointsFromService(service *v1.Service, perServiceEndpoints map[string][]Endpoint) {
+	validServiceNameKey := regexp.MustCompile(`^SERVICE_([0-9]+_)?NAME$`)
+	for k, v := range service.Annotations {
+		if validServiceNameKey.MatchString(k) {
+			perServiceEndpoints[v] = []Endpoint{}
+		}
+	}
+	if !opts.explicit {
+		perServiceEndpoints[service.Name] = []Endpoint{}
+	}
 }

@@ -48,6 +48,8 @@ func (k2c *kube2consul) generateEntries(endpoint *v1.Endpoints) ([]Endpoint, map
 		return eps, perServiceEndpoints
 	}
 
+	initPerServiceEndpointsFromService(service, perServiceEndpoints)
+
 	for _, subset := range endpoint.Subsets {
 		for _, port := range subset.Ports {
 

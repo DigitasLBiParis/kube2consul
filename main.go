@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/coreos/pkg/flagutil"
 	health "github.com/docker/go-healthcheck"
+	concurrent "github.com/echaouchna/go-threadpool"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	consulapi "github.com/hashicorp/consul/api"
@@ -23,15 +25,15 @@ var (
 	kube2consulVersion string
 	lock               *consulapi.Lock
 	lockCh             <-chan struct{}
+	jobQueue           chan concurrent.Action
+	ExcludedNamespaces []string
 )
 
 type arrayFlags []string
 
 type kube2consul struct {
-	consulCatalog      *consulapi.Catalog
-	endpointsStore     kcache.Store
-	ednpointsChan      chan *v1.Endpoints
-	excludedNamespaces []string
+	consulCatalog  *consulapi.Catalog
+	endpointsStore kcache.Store
 }
 
 type cliOptions struct {
@@ -46,7 +48,19 @@ type cliOptions struct {
 	noHealth           bool
 	consulTag          string
 	explicit           bool
-	excludedNamespaces arrayFlags
+	ExcludedNamespaces arrayFlags
+}
+
+type ActionType string
+
+const (
+	ADD_OR_UPDATE      ActionType = "addOrUpdate"
+	DELETE             ActionType = "delete"
+	REMOVE_DNS_GARBAGE ActionType = "removeDNSGarbage"
+)
+
+func (actionType ActionType) value() string {
+	return string(actionType)
 }
 
 func init() {
@@ -61,7 +75,7 @@ func init() {
 	flag.BoolVar(&opts.noHealth, "no-health", false, "Disable endpoint /health on port 8080")
 	flag.BoolVar(&opts.explicit, "explicit", false, "Only register containers which have SERVICE_NAME label set")
 	flag.StringVar(&opts.consulTag, "consul-tag", "kube2consul", "Tag setted on services to identify services managed by kube2consul in Consul")
-	flag.Var(&opts.excludedNamespaces, "exclude-namespace", "Exclude a namespace")
+	flag.Var(&opts.ExcludedNamespaces, "exclude-namespace", "Exclude a namespace")
 }
 
 func (i *arrayFlags) String() string {
@@ -83,6 +97,13 @@ func inSlice(value string, slice []string) bool {
 }
 
 func (k2c *kube2consul) RemoveDNSGarbage() {
+	for {
+		if len(k2c.endpointsStore.List()) > 0 {
+			break
+		}
+		time.Sleep(time.Second * time.Duration(opts.resyncPeriod))
+	}
+
 	epSet := make(map[string]struct{})
 
 	for _, obj := range k2c.endpointsStore.List() {
@@ -122,6 +143,7 @@ func consulCheck() error {
 
 	return nil
 }
+
 func kubernetesCheck() error {
 	_, err := newKubeClient(opts.kubeAPI, opts.kubeConfig)
 	if err != nil {
@@ -130,15 +152,30 @@ func kubernetesCheck() error {
 	return nil
 }
 
-func updateJob(k2c *kube2consul) {
-	for {
-		select {
-		case endpoint := <-k2c.ednpointsChan:
-			if err := k2c.updateEndpoints(endpoint); err != nil {
-				glog.Errorf("Error handling update event: %v", err)
-			}
+func initJobFunctions(k2c kube2consul) map[string]concurrent.JobFunc {
+	actionJobs := make(map[string]concurrent.JobFunc)
+	actionJobs[ADD_OR_UPDATE.value()] = func(id int, value interface{}) {
+		endpoint := value.(*v1.Endpoints)
+		if err := k2c.updateEndpoints(endpoint); err != nil {
+			glog.Errorf("Error handling update event: %v", err)
 		}
 	}
+
+	actionJobs[DELETE.value()] = func(id int, value interface{}) {
+		service := value.(*v1.Service)
+		var servicesToDelete []string
+		for k, v := range service.Annotations {
+			if strings.HasPrefix(k, "SERVICE_") && strings.HasSuffix(k, "_NAME") {
+				servicesToDelete = append(servicesToDelete, v)
+			}
+		}
+		k2c.removeDeletedServices(servicesToDelete)
+	}
+
+	actionJobs[REMOVE_DNS_GARBAGE.value()] = func(id int, value interface{}) {
+		k2c.RemoveDNSGarbage()
+	}
+	return actionJobs
 }
 
 func main() {
@@ -198,15 +235,19 @@ func main() {
 		glog.Info("Lock acquired")
 	}
 
+	ExcludedNamespaces = opts.ExcludedNamespaces
+	jobQueue = make(chan concurrent.Action)
+	defer close(jobQueue)
+
 	k2c := kube2consul{
-		consulCatalog:      consulClient.Catalog(),
-		excludedNamespaces: opts.excludedNamespaces,
-		ednpointsChan:      make(chan *v1.Endpoints),
+		consulCatalog: consulClient.Catalog(),
 	}
 
 	k2c.endpointsStore = k2c.watchEndpoints(kubeClient)
 
-	go updateJob(&k2c)
+	stopWorkers := concurrent.RunWorkers(jobQueue, initJobFunctions(k2c))
+
+	defer stopWorkers()
 
 	// Handle SIGINT and SIGTERM.
 	sigs := make(chan os.Signal)
@@ -214,8 +255,6 @@ func main() {
 
 	for {
 		select {
-		case <-time.NewTicker(time.Duration(opts.resyncPeriod) * time.Second).C:
-			k2c.RemoveDNSGarbage()
 		case <-lockCh:
 			glog.Fatalf("Lost lock, Exting")
 		case sig := <-sigs:
