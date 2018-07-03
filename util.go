@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 )
 
@@ -118,4 +119,10 @@ func getStringKeysFromMap(mymap map[string][]Endpoint) []string {
 		i++
 	}
 	return keys
+}
+
+func debug(format string, args ...interface{}) {
+	if opts.debug {
+		glog.Infof("[DEBUG] "+format, args...)
+	}
 }
