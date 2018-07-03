@@ -83,17 +83,17 @@ func (k2c *kube2consul) generateEntries(endpoint *v1.Endpoints) ([]Endpoint, map
 	return eps, perServiceEndpoints
 }
 
-func (k2c *kube2consul) updateEndpoints(ep *v1.Endpoints) error {
+func (k2c *kube2consul) updateEndpoints(id int, ep *v1.Endpoints) error {
 	endpoints, perServiceEndpoints := k2c.generateEntries(ep)
 
 	for _, e := range endpoints {
-		if err := k2c.registerEndpoint(e); err != nil {
+		if err := k2c.registerEndpoint(id, e); err != nil {
 			return fmt.Errorf("Error updating endpoints %v: %v", ep.Name, err)
 		}
 	}
 
 	for serviceName, e := range perServiceEndpoints {
-		if err := k2c.removeDeletedEndpoints(serviceName, e); err != nil {
+		if err := k2c.removeDeletedEndpoints(id, serviceName, e); err != nil {
 			return fmt.Errorf("Error removing possible deleted endpoints: %v: %v", serviceName, err)
 		}
 	}

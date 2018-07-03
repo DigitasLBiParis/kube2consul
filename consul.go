@@ -25,14 +25,14 @@ func newConsulClient(consulAPI, consulToken string) (*consulapi.Client, error) {
 	return consulClient, nil
 }
 
-func (k2c *kube2consul) registerEndpoint(e Endpoint) error {
+func (k2c *kube2consul) registerEndpoint(id int, e Endpoint) error {
 	if e.RefName == "" {
 		return nil
 	}
 
 	consulServices, _, err := k2c.consulCatalog.Service(e.Name, opts.consulTag, nil)
 	if err != nil {
-		return fmt.Errorf("Failed to get services: %v", err)
+		return fmt.Errorf("[job: %d] Failed to get services: %v", id, err)
 	}
 
 	for _, service := range consulServices {
@@ -56,9 +56,9 @@ func (k2c *kube2consul) registerEndpoint(e Endpoint) error {
 
 	_, err = k2c.consulCatalog.Register(reg, nil)
 	if err != nil {
-		return fmt.Errorf("Error registrating service %v (%v, %v, %v, %v): %v", e.Name, e.RefName, e.Address, e.Port, e.Tags, err)
+		return fmt.Errorf("[job: %d] Error registrating service %v (%v, %v, %v, %v): %v", id, e.Name, e.RefName, e.Address, e.Port, e.Tags, err)
 	}
-	glog.Infof("Update service %v (%v, %v, %v, %+v)", e.Name, e.RefName, e.Address, e.Port, e.Tags)
+	glog.Infof("[job: %d] Update service %v (%v, %v, %v, %+v)", id, e.Name, e.RefName, e.Address, e.Port, e.Tags)
 
 	return nil
 }
@@ -84,11 +84,11 @@ func endpointExistsCheckTags(refName, address string, port int, tags []string, e
 	return false
 }
 
-func (k2c *kube2consul) removeDeletedEndpoints(serviceName string, endpoints []Endpoint) error {
+func (k2c *kube2consul) removeDeletedEndpoints(id int, serviceName string, endpoints []Endpoint) error {
 	updatedNodes := make(map[string]struct{})
 	services, _, err := k2c.consulCatalog.Service(serviceName, opts.consulTag, nil)
 	if err != nil {
-		return fmt.Errorf("Failed to get services: %v", err)
+		return fmt.Errorf("[job: %d] Failed to get services: %v", id, err)
 	}
 
 	for _, service := range services {
@@ -100,9 +100,9 @@ func (k2c *kube2consul) removeDeletedEndpoints(serviceName string, endpoints []E
 			}
 			_, err := k2c.consulCatalog.Deregister(dereg, nil)
 			if err != nil {
-				return fmt.Errorf("Error deregistrating service {node: %s, service: %s, address: %s, port: %d}: %v", service.Node, service.ServiceName, service.Address, service.ServicePort, err)
+				return fmt.Errorf("[job: %d] Error deregistrating service {node: %s, service: %s, address: %s, port: %d}: %v", id, service.Node, service.ServiceName, service.Address, service.ServicePort, err)
 			}
-			glog.Infof("Deregister service {node: %s, service: %s, address: %s, port: %d}", service.Node, service.ServiceName, service.Address, service.ServicePort)
+			glog.Infof("[job: %d] Deregister service {node: %s, service: %s, address: %s, port: %d}", id, service.Node, service.ServiceName, service.Address, service.ServicePort)
 			updatedNodes[service.Node] = struct{}{}
 		}
 	}
@@ -111,24 +111,24 @@ func (k2c *kube2consul) removeDeletedEndpoints(serviceName string, endpoints []E
 	for nodeName := range updatedNodes {
 		node, _, err := k2c.consulCatalog.Node(nodeName, nil)
 		if err != nil {
-			return fmt.Errorf("Cannot get node %s: %v", nodeName, err)
+			return fmt.Errorf("[job: %d] Cannot get node %s: %v", id, nodeName, err)
 		} else if node != nil && len(node.Services) == 0 {
 			dereg := &consulapi.CatalogDeregistration{
 				Node: nodeName,
 			}
 			_, err = k2c.consulCatalog.Deregister(dereg, nil)
 			if err != nil {
-				return fmt.Errorf("Error deregistrating node %s: %v", nodeName, err)
+				return fmt.Errorf("[job: %d] Error deregistrating node %s: %v", id, nodeName, err)
 			}
-			glog.Infof("Deregister empty node %s", nodeName)
+			glog.Infof("[job: %d] Deregister empty node %s", id, nodeName)
 		}
 	}
 	return nil
 }
 
-func (k2c *kube2consul) removeDeletedServices(serviceNames []string) error {
+func (k2c *kube2consul) removeDeletedServices(id int, serviceNames []string) error {
 	for _, serviceName := range serviceNames {
-		k2c.removeDeletedEndpoints(serviceName, []Endpoint{})
+		k2c.removeDeletedEndpoints(id, serviceName, []Endpoint{})
 	}
 	return nil
 }

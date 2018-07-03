@@ -95,7 +95,7 @@ func inSlice(value string, slice []string) bool {
 	return false
 }
 
-func (k2c *kube2consul) RemoveDNSGarbage() {
+func (k2c *kube2consul) RemoveDNSGarbage(id int) {
 	for {
 		if len(k2c.endpointsStore.List()) > 0 {
 			break
@@ -116,7 +116,7 @@ func (k2c *kube2consul) RemoveDNSGarbage() {
 
 	services, _, err := k2c.consulCatalog.Services(nil)
 	if err != nil {
-		glog.Errorf("Cannot remove DNS garbage: %v", err)
+		glog.Errorf("[job: %d] Cannot remove DNS garbage: %v", id, err)
 		return
 	}
 
@@ -126,9 +126,9 @@ func (k2c *kube2consul) RemoveDNSGarbage() {
 		}
 
 		if _, ok := epSet[name]; !ok {
-			err = k2c.removeDeletedEndpoints(name, []Endpoint{})
+			err = k2c.removeDeletedEndpoints(id, name, []Endpoint{})
 			if err != nil {
-				glog.Errorf("Error removing DNS garbage: %v", err)
+				glog.Errorf("[job: %d] Error removing DNS garbage: %v", id, err)
 			}
 		}
 	}
@@ -155,7 +155,7 @@ func initJobFunctions(k2c kube2consul) map[string]concurrent.JobFunc {
 	actionJobs := make(map[string]concurrent.JobFunc)
 	actionJobs[ADD_OR_UPDATE.value()] = func(id int, value interface{}) {
 		endpoint := value.(*v1.Endpoints)
-		if err := k2c.updateEndpoints(endpoint); err != nil {
+		if err := k2c.updateEndpoints(id, endpoint); err != nil {
 			glog.Errorf("Error handling update event: %v", err)
 		}
 	}
@@ -164,11 +164,11 @@ func initJobFunctions(k2c kube2consul) map[string]concurrent.JobFunc {
 		service := value.(*v1.Service)
 		perServiceEndpoints := make(map[string][]Endpoint)
 		initPerServiceEndpointsFromService(service, perServiceEndpoints)
-		k2c.removeDeletedServices(getStringKeysFromMap(perServiceEndpoints))
+		k2c.removeDeletedServices(id, getStringKeysFromMap(perServiceEndpoints))
 	}
 
 	actionJobs[REMOVE_DNS_GARBAGE.value()] = func(id int, value interface{}) {
-		k2c.RemoveDNSGarbage()
+		k2c.RemoveDNSGarbage(id)
 	}
 	return actionJobs
 }
