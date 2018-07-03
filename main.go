@@ -25,7 +25,6 @@ var (
 	lock               *consulapi.Lock
 	lockCh             <-chan struct{}
 	jobQueue           chan concurrent.Action
-	ExcludedNamespaces []string
 )
 
 type arrayFlags []string
@@ -47,15 +46,24 @@ type cliOptions struct {
 	noHealth           bool
 	consulTag          string
 	explicit           bool
-	ExcludedNamespaces arrayFlags
+	debug              bool
+	excludedNamespaces arrayFlags
 }
 
+// ActionType holds the name of the action to be executed
+// add
+// update
+// delete
+// remove dns garbage
 type ActionType string
 
 const (
-	ADD_OR_UPDATE      ActionType = "addOrUpdate"
-	DELETE             ActionType = "delete"
-	REMOVE_DNS_GARBAGE ActionType = "removeDNSGarbage"
+	// AddOrUpdate add or update action name
+	AddOrUpdate ActionType = "addOrUpdate"
+	// Delete delete action name
+	Delete ActionType = "delete"
+	// RemoveDNSGarbage remove DNS garbage action name
+	RemoveDNSGarbage ActionType = "removeDNSGarbage"
 )
 
 func (actionType ActionType) value() string {
@@ -73,8 +81,9 @@ func init() {
 	flag.StringVar(&opts.lockKey, "lock-key", "locks/kube2consul/.lock", "Key used for locking")
 	flag.BoolVar(&opts.noHealth, "no-health", false, "Disable endpoint /health on port 8080")
 	flag.BoolVar(&opts.explicit, "explicit", false, "Only register containers which have SERVICE_NAME label set")
+	flag.BoolVar(&opts.debug, "debug", false, "Enables debug log mode")
 	flag.StringVar(&opts.consulTag, "consul-tag", "kube2consul", "Tag setted on services to identify services managed by kube2consul in Consul")
-	flag.Var(&opts.ExcludedNamespaces, "exclude-namespace", "Exclude a namespace")
+	flag.Var(&opts.excludedNamespaces, "exclude-namespace", "Exclude a namespace")
 }
 
 func (i *arrayFlags) String() string {
@@ -153,21 +162,21 @@ func kubernetesCheck() error {
 
 func initJobFunctions(k2c kube2consul) map[string]concurrent.JobFunc {
 	actionJobs := make(map[string]concurrent.JobFunc)
-	actionJobs[ADD_OR_UPDATE.value()] = func(id int, value interface{}) {
+	actionJobs[AddOrUpdate.value()] = func(id int, value interface{}) {
 		endpoint := value.(*v1.Endpoints)
 		if err := k2c.updateEndpoints(id, endpoint); err != nil {
 			glog.Errorf("Error handling update event: %v", err)
 		}
 	}
 
-	actionJobs[DELETE.value()] = func(id int, value interface{}) {
+	actionJobs[Delete.value()] = func(id int, value interface{}) {
 		service := value.(*v1.Service)
 		perServiceEndpoints := make(map[string][]Endpoint)
 		initPerServiceEndpointsFromService(service, perServiceEndpoints)
 		k2c.removeDeletedServices(id, getStringKeysFromMap(perServiceEndpoints))
 	}
 
-	actionJobs[REMOVE_DNS_GARBAGE.value()] = func(id int, value interface{}) {
+	actionJobs[RemoveDNSGarbage.value()] = func(id int, value interface{}) {
 		k2c.RemoveDNSGarbage(id)
 	}
 	return actionJobs
@@ -230,7 +239,6 @@ func main() {
 		glog.Info("Lock acquired")
 	}
 
-	ExcludedNamespaces = opts.ExcludedNamespaces
 	jobQueue = make(chan concurrent.Action)
 	defer close(jobQueue)
 

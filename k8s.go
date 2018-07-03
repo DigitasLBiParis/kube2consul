@@ -80,7 +80,7 @@ func (k2c *kube2consul) handleUpdate(resourceType string, actionType ActionType,
 	case "endpoints":
 		{
 			if e, ok := obj.(*v1.Endpoints); ok {
-				if !stringInSlice(e.Namespace, ExcludedNamespaces) {
+				if !stringInSlice(e.Namespace, opts.excludedNamespaces) {
 					action = concurrent.Action{Name: actionType.value(), Data: e}
 				}
 			}
@@ -88,7 +88,7 @@ func (k2c *kube2consul) handleUpdate(resourceType string, actionType ActionType,
 	case "services":
 		{
 			if s, ok := obj.(*v1.Service); ok {
-				if !stringInSlice(s.Namespace, ExcludedNamespaces) {
+				if !stringInSlice(s.Namespace, opts.excludedNamespaces) {
 					action = concurrent.Action{Name: actionType.value(), Data: s}
 				}
 			}
@@ -98,7 +98,7 @@ func (k2c *kube2consul) handleUpdate(resourceType string, actionType ActionType,
 }
 
 func cleanGarbage() {
-	jobQueue <- concurrent.Action{Name: REMOVE_DNS_GARBAGE.value(), Data: nil}
+	jobQueue <- concurrent.Action{Name: RemoveDNSGarbage.value(), Data: nil}
 }
 
 func (k2c *kube2consul) watchEndpoints(kubeClient kubernetes.Interface) kcache.Store {
@@ -109,10 +109,10 @@ func (k2c *kube2consul) watchEndpoints(kubeClient kubernetes.Interface) kcache.S
 		0,
 		kcache.ResourceEventHandlerFuncs{
 			AddFunc: func(newObj interface{}) {
-				go k2c.handleUpdate("endpoints", ADD_OR_UPDATE, newObj)
+				go k2c.handleUpdate("endpoints", AddOrUpdate, newObj)
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				go k2c.handleUpdate("endpoints", ADD_OR_UPDATE, newObj)
+				go k2c.handleUpdate("endpoints", AddOrUpdate, newObj)
 			},
 		},
 	)
@@ -123,7 +123,7 @@ func (k2c *kube2consul) watchEndpoints(kubeClient kubernetes.Interface) kcache.S
 		0,
 		kcache.ResourceEventHandlerFuncs{
 			DeleteFunc: func(obj interface{}) {
-				go k2c.handleUpdate("services", DELETE, obj)
+				go k2c.handleUpdate("services", Delete, obj)
 			},
 		},
 	)
