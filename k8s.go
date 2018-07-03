@@ -136,10 +136,10 @@ func (k2c *kube2consul) watchEndpoints(kubeClient kubernetes.Interface) kcache.S
 		0,
 		kcache.ResourceEventHandlerFuncs{
 			AddFunc: func(newObj interface{}) {
-				go k2c.handleUpdate("endpoints", AddOrUpdate, newObj)
+				k2c.handleUpdate("endpoints", AddOrUpdate, newObj)
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				go k2c.handleUpdate("endpoints", AddOrUpdate, newObj)
+				k2c.handleUpdate("endpoints", AddOrUpdate, newObj)
 			},
 		},
 	)
@@ -150,10 +150,10 @@ func (k2c *kube2consul) watchEndpoints(kubeClient kubernetes.Interface) kcache.S
 		0,
 		kcache.ResourceEventHandlerFuncs{
 			DeleteFunc: func(obj interface{}) {
-				go k2c.handleUpdate("services", Delete, obj)
+				k2c.handleUpdate("services", Delete, obj)
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				go k2c.handleUpdate("services", UpdateService, newObj)
+				k2c.handleUpdate("services", UpdateService, newObj)
 			},
 		},
 	)

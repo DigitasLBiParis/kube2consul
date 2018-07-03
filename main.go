@@ -15,6 +15,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	consulapi "github.com/hashicorp/consul/api"
+	"github.com/vburenin/nsync"
 	"k8s.io/api/core/v1"
 	kcache "k8s.io/client-go/tools/cache"
 )
@@ -26,6 +27,7 @@ var (
 	lockCh                         <-chan struct{}
 	jobQueue                       chan concurrent.Action
 	removeDNSGarbageAlreadyRunning = false
+	nmutex                         = nsync.NewNamedMutex()
 )
 
 type arrayFlags []string
@@ -110,13 +112,6 @@ func inSlice(value string, slice []string) bool {
 }
 
 func (k2c *kube2consul) RemoveDNSGarbage(id int) {
-	for {
-		if len(k2c.endpointsStore.List()) > 0 {
-			break
-		}
-		time.Sleep(time.Second * time.Duration(opts.resyncPeriod))
-	}
-
 	epSet := make(map[string]struct{})
 
 	for _, obj := range k2c.endpointsStore.List() {
@@ -169,6 +164,8 @@ func initJobFunctions(k2c kube2consul) map[string]concurrent.JobFunc {
 	actionJobs := make(map[string]concurrent.JobFunc)
 	actionJobs[AddOrUpdate.value()] = func(id int, value interface{}) {
 		if endpoints, ok := value.(*v1.Endpoints); ok {
+			nmutex.Lock(endpoints.Name)
+			defer nmutex.Unlock(endpoints.Name)
 			if err := k2c.updateEndpoints(id, endpoints); err != nil {
 				glog.Errorf("Error handling update event: %v", err)
 			}
@@ -177,6 +174,8 @@ func initJobFunctions(k2c kube2consul) map[string]concurrent.JobFunc {
 
 	actionJobs[Delete.value()] = func(id int, value interface{}) {
 		if service, ok := value.(*v1.Service); ok {
+			nmutex.Lock(service.Name)
+			defer nmutex.Unlock(service.Name)
 			perServiceEndpoints := make(map[string][]Endpoint)
 			initPerServiceEndpointsFromService(service, perServiceEndpoints)
 			k2c.removeDeletedServices(id, getStringKeysFromMap(perServiceEndpoints))
@@ -185,6 +184,8 @@ func initJobFunctions(k2c kube2consul) map[string]concurrent.JobFunc {
 
 	actionJobs[UpdateService.value()] = func(id int, value interface{}) {
 		if service, ok := value.(*v1.Service); ok {
+			nmutex.Lock(service.Name)
+			defer nmutex.Unlock(service.Name)
 			endpoints := getEndpoints(service)
 			if err := k2c.updateEndpoints(id, endpoints); err != nil {
 				glog.Errorf("Error handling update event: %v", err)
