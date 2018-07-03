@@ -20,11 +20,12 @@ import (
 )
 
 var (
-	opts               cliOptions
-	kube2consulVersion string
-	lock               *consulapi.Lock
-	lockCh             <-chan struct{}
-	jobQueue           chan concurrent.Action
+	opts                           cliOptions
+	kube2consulVersion             string
+	lock                           *consulapi.Lock
+	lockCh                         <-chan struct{}
+	jobQueue                       chan concurrent.Action
+	removeDNSGarbageAlreadyRunning = false
 )
 
 type arrayFlags []string
@@ -193,6 +194,7 @@ func initJobFunctions(k2c kube2consul) map[string]concurrent.JobFunc {
 
 	actionJobs[RemoveDNSGarbage.value()] = func(id int, value interface{}) {
 		k2c.RemoveDNSGarbage(id)
+		removeDNSGarbageAlreadyRunning = false
 	}
 	return actionJobs
 }
@@ -274,7 +276,10 @@ func main() {
 	for {
 		select {
 		case <-time.NewTicker(time.Duration(opts.resyncPeriod) * time.Second).C:
-			go cleanGarbage()
+			if !removeDNSGarbageAlreadyRunning {
+				removeDNSGarbageAlreadyRunning = true
+				go cleanGarbage()
+			}
 		case <-lockCh:
 			glog.Fatalf("Lost lock, Exting")
 		case sig := <-sigs:

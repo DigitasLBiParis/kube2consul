@@ -130,7 +130,6 @@ func cleanGarbage() {
 }
 
 func (k2c *kube2consul) watchEndpoints(kubeClient kubernetes.Interface) kcache.Store {
-	go cleanGarbage()
 	eStore, eController := kcache.NewInformer(
 		createListWatcher(kubeClient, "endpoints"),
 		&v1.Endpoints{},
