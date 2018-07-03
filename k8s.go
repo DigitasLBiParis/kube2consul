@@ -68,6 +68,34 @@ func newKubeClient(apiserver string, kubeconfig string) (kubeClient kubernetes.I
 	return kubeClient, nil
 }
 
+func getService(ep *v1.Endpoints) *v1.Service {
+	service := &v1.Service{}
+	err := k8sRestClient.Get().
+		Namespace(ep.Namespace).
+		Resource("services").
+		Name(ep.Name).
+		Do().
+		Into(service)
+	if err != nil {
+		return nil
+	}
+	return service
+}
+
+func getEndpoints(svc *v1.Service) *v1.Endpoints {
+	endpoints := &v1.Endpoints{}
+	err := k8sRestClient.Get().
+		Namespace(svc.Namespace).
+		Resource("endpoints").
+		Name(svc.Name).
+		Do().
+		Into(endpoints)
+	if err != nil {
+		return nil
+	}
+	return endpoints
+}
+
 // Returns a cache.ListWatch that gets all changes to a resourceType.
 func createListWatcher(kubeClient kubernetes.Interface, resourceType string) *kcache.ListWatch {
 	k8sRestClient = kubeClient.CoreV1().RESTClient()
@@ -124,6 +152,9 @@ func (k2c *kube2consul) watchEndpoints(kubeClient kubernetes.Interface) kcache.S
 		kcache.ResourceEventHandlerFuncs{
 			DeleteFunc: func(obj interface{}) {
 				go k2c.handleUpdate("services", Delete, obj)
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				go k2c.handleUpdate("services", UpdateService, newObj)
 			},
 		},
 	)

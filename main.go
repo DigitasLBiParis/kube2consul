@@ -65,6 +65,8 @@ const (
 	Delete ActionType = "delete"
 	// RemoveDNSGarbage remove DNS garbage action name
 	RemoveDNSGarbage ActionType = "removeDNSGarbage"
+	// UpdateService update service metadata
+	UpdateService ActionType = "updateService"
 )
 
 func (actionType ActionType) value() string {
@@ -165,17 +167,28 @@ func kubernetesCheck() error {
 func initJobFunctions(k2c kube2consul) map[string]concurrent.JobFunc {
 	actionJobs := make(map[string]concurrent.JobFunc)
 	actionJobs[AddOrUpdate.value()] = func(id int, value interface{}) {
-		endpoint := value.(*v1.Endpoints)
-		if err := k2c.updateEndpoints(id, endpoint); err != nil {
-			glog.Errorf("Error handling update event: %v", err)
+		if endpoints, ok := value.(*v1.Endpoints); ok {
+			if err := k2c.updateEndpoints(id, endpoints); err != nil {
+				glog.Errorf("Error handling update event: %v", err)
+			}
 		}
 	}
 
 	actionJobs[Delete.value()] = func(id int, value interface{}) {
-		service := value.(*v1.Service)
-		perServiceEndpoints := make(map[string][]Endpoint)
-		initPerServiceEndpointsFromService(service, perServiceEndpoints)
-		k2c.removeDeletedServices(id, getStringKeysFromMap(perServiceEndpoints))
+		if service, ok := value.(*v1.Service); ok {
+			perServiceEndpoints := make(map[string][]Endpoint)
+			initPerServiceEndpointsFromService(service, perServiceEndpoints)
+			k2c.removeDeletedServices(id, getStringKeysFromMap(perServiceEndpoints))
+		}
+	}
+
+	actionJobs[UpdateService.value()] = func(id int, value interface{}) {
+		if service, ok := value.(*v1.Service); ok {
+			endpoints := getEndpoints(service)
+			if err := k2c.updateEndpoints(id, endpoints); err != nil {
+				glog.Errorf("Error handling update event: %v", err)
+			}
+		}
 	}
 
 	actionJobs[RemoveDNSGarbage.value()] = func(id int, value interface{}) {
@@ -260,6 +273,8 @@ func main() {
 
 	for {
 		select {
+		case <-time.NewTicker(time.Duration(opts.resyncPeriod) * time.Second).C:
+			go cleanGarbage()
 		case <-lockCh:
 			glog.Fatalf("Lost lock, Exting")
 		case sig := <-sigs:
