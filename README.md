@@ -21,6 +21,7 @@ Kube2consul runs in a kubernetes cluster by default. It is able to work out of c
 | `-resync-period`    | `K2C_RESYNC_PERIOD`  | `30`                      |
 | `-explicit`         | `K2C_EXPLICIT`       | `false`                   |
 | `-debug`            | `K2C_DEBUG`          | `false`                   |
+| `-job-number`       | `K2C_JOB_NUMBER`     | `0`                       |
 
 Kube2consul is able to detect any endpoint update on k8s and add/remove it to/from consul.
 It can also read service annotations, below an example of kube service with kube2consul compatible annotations

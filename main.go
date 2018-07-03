@@ -48,6 +48,7 @@ type cliOptions struct {
 	explicit           bool
 	debug              bool
 	excludedNamespaces arrayFlags
+	jobNumber          int
 }
 
 // ActionType holds the name of the action to be executed
@@ -82,6 +83,7 @@ func init() {
 	flag.BoolVar(&opts.noHealth, "no-health", false, "Disable endpoint /health on port 8080")
 	flag.BoolVar(&opts.explicit, "explicit", false, "Only register containers which have SERVICE_NAME label set")
 	flag.BoolVar(&opts.debug, "debug", false, "Enables debug log mode")
+	flag.IntVar(&opts.jobNumber, "job-number", 0, "The number of parallel jobs")
 	flag.StringVar(&opts.consulTag, "consul-tag", "kube2consul", "Tag setted on services to identify services managed by kube2consul in Consul")
 	flag.Var(&opts.excludedNamespaces, "exclude-namespace", "Exclude a namespace")
 }
@@ -248,7 +250,7 @@ func main() {
 
 	k2c.endpointsStore = k2c.watchEndpoints(kubeClient)
 
-	stopWorkers := concurrent.RunWorkers(jobQueue, initJobFunctions(k2c))
+	stopWorkers := concurrent.RunWorkers(jobQueue, initJobFunctions(k2c), opts.jobNumber)
 
 	defer stopWorkers()
 
