@@ -125,10 +125,6 @@ func (k2c *kube2consul) handleUpdate(resourceType string, actionType ActionType,
 	jobQueue <- action
 }
 
-func cleanGarbage() {
-	jobQueue <- concurrent.Action{Name: RemoveDNSGarbage.value(), Data: nil}
-}
-
 func (k2c *kube2consul) watchEndpoints(kubeClient kubernetes.Interface) kcache.Store {
 	eStore, eController := kcache.NewInformer(
 		createListWatcher(kubeClient, "endpoints"),

@@ -19,8 +19,10 @@ type Action struct {
 	Data interface{}
 }
 
-func threadMain(id int, queue chan Action, wg *sync.WaitGroup, jobs map[string]JobFunc) chan bool {
-	quitCommand := make(chan bool, 1)
+func threadMain(id int, queue chan Action, wg *sync.WaitGroup, jobs map[string]JobFunc) (playCommand chan bool, pauseCommand chan bool, quitCommand chan bool) {
+	quitCommand = make(chan bool, 1)
+	pauseCommand = make(chan bool, 1)
+	playCommand = make(chan bool, 1)
 	go func() {
 		for {
 			select {
@@ -32,11 +34,17 @@ func threadMain(id int, queue chan Action, wg *sync.WaitGroup, jobs map[string]J
 				wg.Done()
 			case <-quitCommand:
 				return
+			case <-pauseCommand:
+				select {
+				case <-playCommand:
+				case <-quitCommand:
+					return
+				}
+			case <-playCommand:
 			}
-
 		}
 	}()
-	return quitCommand
+	return
 }
 
 // RunWorkers create and run jobs
@@ -46,7 +54,7 @@ func threadMain(id int, queue chan Action, wg *sync.WaitGroup, jobs map[string]J
 // * workersNumber the number of jobs
 //   - if workersNumber <= 0 or workersNumber > 2*cpuCount ==> runtime.NumCPU() will be used
 //   - otherwise workersNumber will be used
-func RunWorkers(queue chan Action, jobFunctions map[string]JobFunc, workersNumber int) func() {
+func RunWorkers(queue chan Action, jobFunctions map[string]JobFunc, workersNumber int) (play func(), pause func(), quit func()) {
 	var wg sync.WaitGroup
 	cpuCount := runtime.NumCPU()
 	jobCount := cpuCount
@@ -57,14 +65,28 @@ func RunWorkers(queue chan Action, jobFunctions map[string]JobFunc, workersNumbe
 
 	glog.Infof("Running %d jobs", jobCount)
 
+	playCommands := make([]chan bool, jobCount)
+	pauseCommands := make([]chan bool, jobCount)
 	quitCommands := make([]chan bool, jobCount)
 	for i := 0; i < jobCount; i++ {
-		quitCommands[i] = threadMain(i+1, queue, &wg, jobFunctions)
+		playCommands[i], pauseCommands[i], quitCommands[i] = threadMain(i+1, queue, &wg, jobFunctions)
 	}
-	return func() {
+	pause = func() {
+		for _, pauseCommand := range pauseCommands {
+			pauseCommand <- true
+		}
+		wg.Wait()
+	}
+	play = func() {
+		for _, playCommand := range playCommands {
+			playCommand <- true
+		}
+	}
+	quit = func() {
 		for _, quitCommand := range quitCommands {
 			quitCommand <- true
 		}
 		wg.Wait()
 	}
+	return
 }

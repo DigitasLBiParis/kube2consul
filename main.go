@@ -66,8 +66,6 @@ const (
 	AddOrUpdate ActionType = "addOrUpdate"
 	// Delete delete action name
 	Delete ActionType = "delete"
-	// RemoveDNSGarbage remove DNS garbage action name
-	RemoveDNSGarbage ActionType = "removeDNSGarbage"
 	// UpdateService update service metadata
 	UpdateService ActionType = "updateService"
 )
@@ -192,11 +190,6 @@ func initJobFunctions(k2c kube2consul) map[string]concurrent.JobFunc {
 			}
 		}
 	}
-
-	actionJobs[RemoveDNSGarbage.value()] = func(id int, value interface{}) {
-		k2c.RemoveDNSGarbage(id)
-		removeDNSGarbageAlreadyRunning = false
-	}
 	return actionJobs
 }
 
@@ -266,7 +259,7 @@ func main() {
 
 	k2c.endpointsStore = k2c.watchEndpoints(kubeClient)
 
-	stopWorkers := concurrent.RunWorkers(jobQueue, initJobFunctions(k2c), opts.jobNumber)
+	playWorkers, pauseWorkers, stopWorkers := concurrent.RunWorkers(jobQueue, initJobFunctions(k2c), opts.jobNumber)
 
 	defer stopWorkers()
 
@@ -279,7 +272,12 @@ func main() {
 		case <-time.NewTicker(time.Duration(opts.resyncPeriod) * time.Second).C:
 			if !removeDNSGarbageAlreadyRunning {
 				removeDNSGarbageAlreadyRunning = true
-				go cleanGarbage()
+				go func() {
+					pauseWorkers()
+					defer playWorkers()
+					k2c.RemoveDNSGarbage(0)
+					removeDNSGarbageAlreadyRunning = false
+				}()
 			}
 		case <-lockCh:
 			glog.Fatalf("Lost lock, Exting")
