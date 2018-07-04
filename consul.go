@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/golang/glog"
 	consulapi "github.com/hashicorp/consul/api"
@@ -30,6 +31,7 @@ func (k2c *kube2consul) registerEndpoint(id int, e Endpoint) error {
 		return nil
 	}
 	debug("[job: %d] %s >>>>>>>>>>>>>>>>>>>> registerEndpoint", id, e.RefName)
+	e = updateEndpointsRefNames([]Endpoint{e})[0]
 
 	consulServices, _, err := k2c.consulCatalog.Service(e.Name, opts.consulTag, nil)
 	if err != nil {
@@ -78,7 +80,7 @@ func endpointExistsCheckTags(id int, refName, address string, port int, tags []s
 				sort.Strings(tags)
 				sort.Strings(endpointTags)
 				if !reflect.DeepEqual(tags, endpointTags) {
-					debug("[job: %d] %s >>> false: diffirent tags", id, refName)
+					debug("[job: %d] %s >>> false: different tags", id, refName)
 					return false
 				}
 			}
@@ -90,7 +92,19 @@ func endpointExistsCheckTags(id int, refName, address string, port int, tags []s
 	return false
 }
 
+func updateEndpointsRefNames(endpoints []Endpoint) (updatedEndpoints []Endpoint) {
+	for _, endpoint := range endpoints {
+		refName := endpoint.RefName
+		if strings.HasPrefix(refName, "consul") {
+			refName = opts.consulTag + "-" + refName
+		}
+		updatedEndpoints = append(updatedEndpoints, Endpoint{endpoint.Name, endpoint.Address, endpoint.Port, refName, endpoint.Tags})
+	}
+	return
+}
+
 func (k2c *kube2consul) removeDeletedEndpoints(id int, serviceName string, endpoints []Endpoint) error {
+	endpoints = updateEndpointsRefNames(endpoints)
 	updatedNodes := make(map[string]struct{})
 	services, _, err := k2c.consulCatalog.Service(serviceName, opts.consulTag, nil)
 	if err != nil {
