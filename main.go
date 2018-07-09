@@ -21,13 +21,13 @@ import (
 )
 
 var (
-	opts                           cliOptions
-	kube2consulVersion             string
-	lock                           *consulapi.Lock
-	lockCh                         <-chan struct{}
-	jobQueue                       chan concurrent.Action
-	removeDNSGarbageAlreadyRunning = false
-	nmutex                         = nsync.NewNamedMutex()
+	opts                 cliOptions
+	kube2consulVersion   string
+	lock                 *consulapi.Lock
+	lockCh               <-chan struct{}
+	jobQueue             chan concurrent.Action
+	resyncAlreadyRunning = false
+	nmutex               = nsync.NewNamedMutex()
 )
 
 type arrayFlags []string
@@ -109,14 +109,15 @@ func inSlice(value string, slice []string) bool {
 	return false
 }
 
-func (k2c *kube2consul) RemoveDNSGarbage(id int) {
-	epSet := make(map[string]struct{})
+func (k2c *kube2consul) resync(id int) {
+	epSet := make(map[string]bool)
+	perServiceEndpoints := make(map[string][]Endpoint)
 
 	for _, obj := range k2c.endpointsStore.List() {
-		if ep, ok := obj.(*v1.Endpoints); ok {
-			generatedEndpoints, _ := k2c.generateEntries(ep)
-			for _, generatedEndpoint := range generatedEndpoints {
-				epSet[generatedEndpoint.Name] = struct{}{}
+		if ep, ok := obj.(*v1.Endpoints); ok && !stringInSlice(ep.Namespace, opts.excludedNamespaces) {
+			_, perServiceEndpoints = k2c.generateEntries(ep)
+			for name := range perServiceEndpoints {
+				epSet[name] = false
 			}
 		}
 	}
@@ -136,6 +137,17 @@ func (k2c *kube2consul) RemoveDNSGarbage(id int) {
 			err = k2c.removeDeletedEndpoints(id, name, []Endpoint{})
 			if err != nil {
 				glog.Errorf("[job: %d] Error removing DNS garbage: %v", id, err)
+			}
+		} else {
+			epSet[name] = true
+		}
+	}
+
+	for name, found := range epSet {
+		if !found {
+			for _, e := range perServiceEndpoints[name] {
+				if err := k2c.registerEndpoint(id, e); err != nil {
+				}
 			}
 		}
 	}
@@ -270,13 +282,13 @@ func main() {
 	for {
 		select {
 		case <-time.NewTicker(time.Duration(opts.resyncPeriod) * time.Second).C:
-			if !removeDNSGarbageAlreadyRunning {
-				removeDNSGarbageAlreadyRunning = true
+			if !resyncAlreadyRunning {
+				resyncAlreadyRunning = true
 				go func() {
 					pauseWorkers()
 					defer playWorkers()
-					k2c.RemoveDNSGarbage(0)
-					removeDNSGarbageAlreadyRunning = false
+					k2c.resync(0)
+					resyncAlreadyRunning = false
 				}()
 			}
 		case <-lockCh:
