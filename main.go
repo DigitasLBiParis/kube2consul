@@ -147,6 +147,7 @@ func (k2c *kube2consul) resync(id int) {
 		if !found {
 			for _, e := range perServiceEndpoints[name] {
 				if err := k2c.registerEndpoint(id, e); err != nil {
+					glog.Errorf("[job: %d] Error updating endpoints %v: %v", id, e.Name, err)
 				}
 			}
 		}
@@ -276,7 +277,7 @@ func main() {
 	defer stopWorkers()
 
 	// Handle SIGINT and SIGTERM.
-	sigs := make(chan os.Signal)
+	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	for {
