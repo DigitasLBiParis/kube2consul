@@ -113,10 +113,14 @@ func (k2c *kube2consul) resync(id int) {
 	epSet := make(map[string]bool)
 	perServiceEndpoints := make(map[string][]Endpoint)
 
+	debug("resync")
+
+	debug("##> k8s services :")
 	for _, obj := range k2c.endpointsStore.List() {
 		if ep, ok := obj.(*v1.Endpoints); ok && !stringInSlice(ep.Namespace, opts.excludedNamespaces) {
-			_, perServiceEndpoints = k2c.generateEntries(ep)
+			_, perServiceEndpoints = k2c.generateEntries(id, ep)
 			for name := range perServiceEndpoints {
+				debug("--> %s", name)
 				epSet[name] = false
 			}
 		}
@@ -128,10 +132,12 @@ func (k2c *kube2consul) resync(id int) {
 		return
 	}
 
+	debug("##> consul services :")
 	for name, tags := range services {
 		if !inSlice(opts.consulTag, tags) {
 			continue
 		}
+		debug("--> %s", name)
 
 		if _, ok := epSet[name]; !ok {
 			err = k2c.removeDeletedEndpoints(id, name, []Endpoint{})
@@ -152,6 +158,8 @@ func (k2c *kube2consul) resync(id int) {
 			}
 		}
 	}
+
+	debug("resync done")
 }
 
 func consulCheck() error {

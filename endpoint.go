@@ -21,7 +21,7 @@ func NewEndpoint(name, address string, port int32, refName string, tags []string
 	return Endpoint{name, address, port, refName, tags}
 }
 
-func (k2c *kube2consul) generateEntries(endpoint *v1.Endpoints) ([]Endpoint, map[string][]Endpoint) {
+func (k2c *kube2consul) generateEntries(id int, endpoint *v1.Endpoints) ([]Endpoint, map[string][]Endpoint) {
 	var (
 		eps                 []Endpoint
 		refName             string
@@ -31,6 +31,7 @@ func (k2c *kube2consul) generateEntries(endpoint *v1.Endpoints) ([]Endpoint, map
 	service := getService(endpoint)
 
 	if service == nil {
+		debug("[job: %d] %s ignoring endpoint %s no service available", id, endpoint.Name)
 		return eps, perServiceEndpoints
 	}
 
@@ -71,7 +72,7 @@ func (k2c *kube2consul) generateEntries(endpoint *v1.Endpoints) ([]Endpoint, map
 
 func (k2c *kube2consul) updateEndpoints(id int, ep *v1.Endpoints) error {
 	debug("[job: %d] %s >>>>>>>>>>>>>>>>>>>> updateEndpoints", id, ep.Name)
-	endpoints, perServiceEndpoints := k2c.generateEntries(ep)
+	endpoints, perServiceEndpoints := k2c.generateEntries(id, ep)
 
 	debug("[job: %d] %s: perServiceEndpoints : %+v", id, ep.Name, perServiceEndpoints)
 	for _, e := range endpoints {
