@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 )
 
@@ -31,7 +32,7 @@ func (k2c *kube2consul) generateEntries(id int, endpoint *v1.Endpoints) ([]Endpo
 	service := getService(endpoint)
 
 	if service == nil {
-		debug("[job: %d] %s ignoring endpoint %s no service available", id, endpoint.Name)
+		glog.V(2).Infof("[job: %d] %s ignoring endpoint %s no service available", id, endpoint.Name)
 		return eps, perServiceEndpoints
 	}
 
@@ -71,23 +72,23 @@ func (k2c *kube2consul) generateEntries(id int, endpoint *v1.Endpoints) ([]Endpo
 }
 
 func (k2c *kube2consul) updateEndpoints(id int, ep *v1.Endpoints) error {
-	debug("[job: %d] %s >>>>>>>>>>>>>>>>>>>> updateEndpoints", id, ep.Name)
+	glog.V(2).Infof("[job: %d] %s >>>>>>>>>>>>>>>>>>>> updateEndpoints", id, ep.Name)
 	endpoints, perServiceEndpoints := k2c.generateEntries(id, ep)
 
-	debug("[job: %d] %s: perServiceEndpoints : %+v", id, ep.Name, perServiceEndpoints)
+	glog.V(2).Infof("[job: %d] %s: perServiceEndpoints : %+v", id, ep.Name, perServiceEndpoints)
 	for _, e := range endpoints {
 		if err := k2c.registerEndpoint(id, e); err != nil {
-			debug("[job: %d] %s <<<<<<<<<<<<<<<<<<<< updateEndpoints", id, ep.Name)
+			glog.V(2).Infof("[job: %d] %s <<<<<<<<<<<<<<<<<<<< updateEndpoints", id, ep.Name)
 			return fmt.Errorf("Error updating endpoints %v: %v", ep.Name, err)
 		}
 	}
 
 	for serviceName, e := range perServiceEndpoints {
 		if err := k2c.removeDeletedEndpoints(id, serviceName, e); err != nil {
-			debug("[job: %d] %s <<<<<<<<<<<<<<<<<<<< updateEndpoints", id, ep.Name)
+			glog.V(2).Infof("[job: %d] %s <<<<<<<<<<<<<<<<<<<< updateEndpoints", id, ep.Name)
 			return fmt.Errorf("Error removing possible deleted endpoints: %v: %v", serviceName, err)
 		}
 	}
-	debug("[job: %d] %s <<<<<<<<<<<<<<<<<<<< updateEndpoints", id, ep.Name)
+	glog.V(2).Infof("[job: %d] %s <<<<<<<<<<<<<<<<<<<< updateEndpoints", id, ep.Name)
 	return nil
 }

@@ -30,7 +30,7 @@ func (k2c *kube2consul) registerEndpoint(id int, e Endpoint) error {
 	if e.RefName == "" {
 		return nil
 	}
-	debug("[job: %d] %s >>>>>>>>>>>>>>>>>>>> registerEndpoint", id, e.RefName)
+	glog.V(2).Infof("[job: %d] %s >>>>>>>>>>>>>>>>>>>> registerEndpoint", id, e.RefName)
 	e = updateEndpointsRefNames([]Endpoint{e})[0]
 
 	consulServices, _, err := k2c.consulCatalog.Service(e.Name, opts.consulTag, nil)
@@ -40,7 +40,7 @@ func (k2c *kube2consul) registerEndpoint(id int, e Endpoint) error {
 
 	for _, service := range consulServices {
 		if endpointExistsCheckTags(id, service.Node, service.Address, service.ServicePort, service.ServiceTags, []Endpoint{e}, true) {
-			debug("[job: %d] %s <<<<<<<<<<<<<<<<<<<<", id, service.Node)
+			glog.V(2).Infof("[job: %d] %s <<<<<<<<<<<<<<<<<<<<", id, service.Node)
 			return nil
 		}
 	}
@@ -64,7 +64,7 @@ func (k2c *kube2consul) registerEndpoint(id int, e Endpoint) error {
 	}
 	glog.Infof("[job: %d] Update service %v (%v, %v, %v, %+v)", id, e.Name, e.RefName, e.Address, e.Port, e.Tags)
 
-	debug("[job: %d] %s <<<<<<<<<<<<<<<<<<<<", id, e.RefName)
+	glog.V(2).Infof("[job: %d] %s <<<<<<<<<<<<<<<<<<<<", id, e.RefName)
 	return nil
 }
 
@@ -80,15 +80,15 @@ func endpointExistsCheckTags(id int, refName, address string, port int, tags []s
 				sort.Strings(tags)
 				sort.Strings(endpointTags)
 				if !reflect.DeepEqual(tags, endpointTags) {
-					debug("[job: %d] %s >>> false: different tags", id, refName)
+					glog.V(2).Infof("[job: %d] %s >>> false: different tags", id, refName)
 					return false
 				}
 			}
-			debug("[job: %d] %s >>> true: equals", id, refName)
+			glog.V(2).Infof("[job: %d] %s >>> true: equals", id, refName)
 			return true
 		}
 	}
-	debug("[job: %d] %s >>> false: not found", id, refName)
+	glog.V(2).Infof("[job: %d] %s >>> false: not found", id, refName)
 	return false
 }
 
@@ -111,7 +111,7 @@ func (k2c *kube2consul) removeDeletedEndpoints(id int, serviceName string, endpo
 		return fmt.Errorf("[job: %d] Failed to get services: %v", id, err)
 	}
 
-	debug("[job: %d] %s >>>>>>>>>>>>>>>>>>>> removeDeletedEndpoints", id, serviceName)
+	glog.V(2).Infof("[job: %d] %s >>>>>>>>>>>>>>>>>>>> removeDeletedEndpoints", id, serviceName)
 	for _, service := range services {
 		if !endpointExists(id, service.Node, service.Address, service.ServicePort, endpoints) {
 			dereg := &consulapi.CatalogDeregistration{
@@ -144,7 +144,7 @@ func (k2c *kube2consul) removeDeletedEndpoints(id int, serviceName string, endpo
 			glog.Infof("[job: %d] Deregister empty node %s", id, nodeName)
 		}
 	}
-	debug("[job: %d] %s <<<<<<<<<<<<<<<<<<<<", id, serviceName)
+	glog.V(2).Infof("[job: %d] %s <<<<<<<<<<<<<<<<<<<<", id, serviceName)
 	return nil
 }
 
