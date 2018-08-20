@@ -7,6 +7,7 @@ import (
 	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 	kapi "k8s.io/api/core/v1"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -100,6 +101,10 @@ func getEndpoints(svc *v1.Service) *v1.Endpoints {
 func createListWatcher(kubeClient kubernetes.Interface, resourceType string) *kcache.ListWatch {
 	k8sRestClient = kubeClient.CoreV1().RESTClient()
 	return kcache.NewListWatchFromClient(k8sRestClient, resourceType, kapi.NamespaceAll, fields.Everything())
+}
+
+func (k2c *kube2consul) getAllEndpoints(kubeClient kubernetes.Interface) (*v1.EndpointsList, error) {
+	return kubeClient.CoreV1().Endpoints("").List(meta_v1.ListOptions{})
 }
 
 func (k2c *kube2consul) handleUpdate(resourceType string, actionType ActionType, obj interface{}) {

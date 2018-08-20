@@ -17,6 +17,7 @@ import (
 	consulapi "github.com/hashicorp/consul/api"
 	"github.com/vburenin/nsync"
 	"k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
 	kcache "k8s.io/client-go/tools/cache"
 )
 
@@ -109,16 +110,17 @@ func inSlice(value string, slice []string) bool {
 	return false
 }
 
-func (k2c *kube2consul) resync(id int) {
+func (k2c *kube2consul) resync(id int, kubeClient kubernetes.Interface) {
 	epSet := make(map[string]bool)
 	perServiceEndpoints := make(map[string][]Endpoint)
 
-	glog.V(2).Infof("resync")
+	glog.Infof("[job: %d] resync", id)
 
 	glog.V(2).Infof("##> k8s services :")
-	for _, obj := range k2c.endpointsStore.List() {
-		if ep, ok := obj.(*v1.Endpoints); ok && !stringInSlice(ep.Namespace, opts.excludedNamespaces) {
-			_, perServiceEndpoints = k2c.generateEntries(id, ep)
+	allEndpoints, err := k2c.getAllEndpoints(kubeClient)
+	for _, ep := range allEndpoints.Items {
+		if !stringInSlice(ep.Namespace, opts.excludedNamespaces) {
+			_, perServiceEndpoints = k2c.generateEntries(id, &ep)
 			for name := range perServiceEndpoints {
 				glog.V(2).Infof("--> %s", name)
 				epSet[name] = false
@@ -146,6 +148,15 @@ func (k2c *kube2consul) resync(id int) {
 			}
 		} else {
 			epSet[name] = true
+			for _, e := range perServiceEndpoints[name] {
+				if err := k2c.registerEndpoint(id, e); err != nil {
+					glog.Errorf("[job: %d] Error updating endpoints %v: %v", id, e.Name, err)
+				}
+			}
+			err = k2c.removeDeletedEndpoints(id, name, perServiceEndpoints[name])
+			if err != nil {
+				glog.Errorf("[job: %d] Error removing DNS garbage: %v", id, err)
+			}
 		}
 	}
 
@@ -159,7 +170,7 @@ func (k2c *kube2consul) resync(id int) {
 		}
 	}
 
-	glog.V(2).Infof("resync done")
+	glog.Infof("[job: %d] resync done", id)
 }
 
 func consulCheck() error {
@@ -280,7 +291,7 @@ func main() {
 
 	k2c.endpointsStore = k2c.watchEndpoints(kubeClient)
 
-	playWorkers, pauseWorkers, stopWorkers := concurrent.RunWorkers(jobQueue, initJobFunctions(k2c), opts.jobNumber)
+	_, _, stopWorkers := concurrent.RunWorkers(jobQueue, initJobFunctions(k2c), opts.jobNumber)
 
 	defer stopWorkers()
 
@@ -294,9 +305,7 @@ func main() {
 			if !resyncAlreadyRunning {
 				resyncAlreadyRunning = true
 				go func() {
-					pauseWorkers()
-					defer playWorkers()
-					k2c.resync(0)
+					k2c.resync(0, kubeClient)
 					resyncAlreadyRunning = false
 				}()
 			}
