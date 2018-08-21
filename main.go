@@ -120,10 +120,15 @@ func (k2c *kube2consul) resync(id int, kubeClient kubernetes.Interface) {
 	allEndpoints, err := k2c.getAllEndpoints(kubeClient)
 	for _, ep := range allEndpoints.Items {
 		if !stringInSlice(ep.Namespace, opts.excludedNamespaces) {
-			_, perServiceEndpoints = k2c.generateEntries(id, &ep)
-			for name := range perServiceEndpoints {
+			_, generatedPerServiceEndpoints := k2c.generateEntries(id, &ep)
+			for name := range generatedPerServiceEndpoints {
 				glog.V(2).Infof("--> %s", name)
 				epSet[name] = false
+				if _, ok := perServiceEndpoints[name]; !ok {
+					perServiceEndpoints[name] = generatedPerServiceEndpoints[name]
+				} else {
+					perServiceEndpoints[name] = append(perServiceEndpoints[name], generatedPerServiceEndpoints[name]...)
+				}
 			}
 		}
 	}
@@ -142,12 +147,14 @@ func (k2c *kube2consul) resync(id int, kubeClient kubernetes.Interface) {
 		glog.V(2).Infof("--> %s", name)
 
 		if _, ok := epSet[name]; !ok {
+			glog.V(2).Infof("[job: %d] Remove unexisting service", id)
 			err = k2c.removeDeletedEndpoints(id, name, []Endpoint{})
 			if err != nil {
 				glog.Errorf("[job: %d] Error removing DNS garbage: %v", id, err)
 			}
 		} else {
 			epSet[name] = true
+			glog.V(2).Infof("[job: %d] Realign k8s and consul", id)
 			for _, e := range perServiceEndpoints[name] {
 				if err := k2c.registerEndpoint(id, e); err != nil {
 					glog.Errorf("[job: %d] Error updating endpoints %v: %v", id, e.Name, err)
